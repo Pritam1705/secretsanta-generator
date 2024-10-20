@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+    tools {
+        jdk 'java17'
+        maven 'maven3'
+        // Ensure that sonar-scanner is configured correctly in Jenkins global tools
+    }
+
+    environment {  
+        SCANNER_HOME = tool name: 'sonar-scanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'  
+    }
+    
+    stages {
+        stage('checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Pritam1705/secretsanta-generator_test.git'
+            }
+        }
+
+        stage('compile') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('Unit Tests') {
+            steps {
+               sh "mvn test"
+            }
+        }
+        
+
+        
+        stage('sonarqube-analysis') {
+            steps {
+                sh ''' 
+                    ${SCANNER_HOME}/bin/sonar-scanner \
+                    -Dsonar.host.url=http://13.234.19.94:9000/ \
+                    -Dsonar.login=squ_400e8ee77a9621fc8bab978407795ae4b833d8f0 \
+                    -Dsonar.projectKey=secret-santa \
+                    -Dsonar.projectName=secret-santa \
+                    -Dsonar.java.binaries=./target
+                '''
+            }
+        }
+
+        stage('build') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+        
+         stage('docker build & push') {
+            steps {
+                script{
+                    withDockerRegistry(credentialsId: 'f6a9cdfe-a2c9-44b0-a4b0-4f96a9b51e2c', toolName: 'docker') {
+                        sh 'docker build -t santa .'
+                        sh 'docker tag santa pritam0517/santa:latest'
+                        sh "docker push pritam0517/santa:latest"
+                         }
+                }
+            }
+        }
+        
+        stage('docker deploy') {
+            steps {
+                script{
+                    withDockerRegistry(credentialsId: 'f6a9cdfe-a2c9-44b0-a4b0-4f96a9b51e2c', toolName: 'docker') {
+                        sh 'docker run -d -p 8081:8080 --name santa pritam0517/santa:latest '
+                         }
+                }
+            }
+        }
+        
+       
+        
+        
+    }
+}
